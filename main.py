@@ -1,11 +1,11 @@
 import logging
 import sys
 from pathlib import Path
-
+from telegram.ext import filters
 sys.path.insert(0, str(Path(__file__).parent))
 
 from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from config import Config
 from src.models.storage import Storage
 from src.services.game_service import GameService
@@ -46,9 +46,19 @@ def main():
     # Промокоды через #
     application.add_handler(CommandHandler("promocode", handlers.promo_code))
     
+
+    application.add_handler(CommandHandler("take", handlers.admin_take_balance))  # <-- новая
+    application.add_handler(CommandHandler("ban", handlers.admin_ban))            # <-- новая
+    application.add_handler(CommandHandler("unban", handlers.admin_unban))        # <-- новая
+    application.add_handler(CommandHandler("banned", handlers.admin_banned_list)) # <-- новая
+    
     # Callback для кнопок
     application.add_handler(CallbackQueryHandler(handlers.coinflip_callback, pattern="^coinflip_"))
-    
+    application.add_handler(CallbackQueryHandler(handlers.mines_callback, pattern="^mines_"))
+
+
+    # После всех CommandHandler добавь:
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.handle_text))
     logger.info("Bot started! Press Ctrl+C to stop.")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 

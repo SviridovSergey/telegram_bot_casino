@@ -24,7 +24,7 @@ class Storage:
     
     def _default_data(self) -> Dict:
         return {
-            'users': {},  # user_id: {balance, username, first_name, games_played, total_won, total_lost}
+            'users': {},  # user_id: {balance, username, first_name, games_played, total_won, total_lost,banned}
             'promo_codes': {},  # code: {amount, used_by, created_at}
             'game_states': {},  # user_id: {game_type: state_data}
             'treasury': 0  # казна чата
@@ -49,7 +49,8 @@ class Storage:
                 'games_played': 0,
                 'total_won': 0,
                 'total_lost': 0,
-                'created_at': datetime.now().isoformat()
+                'created_at': datetime.now().isoformat(),
+                'banned':False
             }
             self._save()
     
@@ -142,3 +143,29 @@ class Storage:
         self.data['treasury'] = self.data.get('treasury', 0) + amount
         self._save()
 
+    def ban_user(self,user_id:int)->bool:
+        user_id_str=str(user_id)
+        if user_id_str in self.data['users']:
+            self.data['users'][user_id_str]['banned']=True
+            self._save()
+            return True
+        return False
+
+    def unban_user(self,user_id:int)->bool:
+        user_id_str=str(user_id)
+        if user_id_str in self.data['users']:
+            self.data['users'][user_id_str]['banned']=False
+            self._save()
+            return True
+        return False
+
+    def is_banned(self,user_id:int)->bool:
+        user=self.get_user(user_id)
+        return user.get('banned',False) if user else False
+
+    def get_banned_users(self)->List[Dict]:
+        return [user for user in self.data['users'].values() if user.get('banned',False)]
+    def _is_promo_exists(self, code: str) -> bool:
+        """Проверить существует ли промокод"""
+        code = code.upper()
+        return code in self.data['promo_codes']
