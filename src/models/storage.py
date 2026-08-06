@@ -25,7 +25,7 @@ class Storage:
     def _default_data(self) -> Dict:
         return {
             'users': {},  # user_id: {balance, username, first_name, games_played, total_won, total_lost,banned}
-            'promo_codes': {},  # code: {amount, used_by, created_at}
+            'promo_codes': {},  # code: {amount, used_by, created_at, max_uses, used_count}
             'game_states': {},  # user_id: {game_type: state_data}
             'treasury': 0  # казна чата
         }
@@ -50,7 +50,7 @@ class Storage:
                 'total_won': 0,
                 'total_lost': 0,
                 'created_at': datetime.now().isoformat(),
-                'banned':False
+                'banned': False
             }
             self._save()
     
@@ -92,24 +92,57 @@ class Storage:
         self._save()
         return True
     
-    def create_promo_code(self, code: str, amount: int):
-        """Создать промокод"""
+    def create_promo_code(self, code: str, amount: int, max_uses: int = 1):
+        """Создать промокод с ограничением по количеству использований"""
         self.data['promo_codes'][code.upper()] = {
             'amount': amount,
-            'used_by': None,
+            'max_uses': max_uses,
+            'used_count': 0,
+            'used_by': [],  # список ID пользователей, кто использовал
             'created_at': datetime.now().isoformat()
         }
         self._save()
-    
+
     def use_promo_code(self, code: str, user_id: int) -> Optional[int]:
+        """Использовать промокод, возвращает сумму или None"""
         code = code.upper()
         promo = self.data['promo_codes'].get(code)
         
-        if promo and promo['used_by'] is None:
-            promo['used_by'] = str(user_id)
-            self._save()
-            return promo['amount']
+        if not promo:
+            return None
+        
+        # Проверяем не превышен ли лимит
+        if promo['used_count'] >= promo['max_uses']:
+            return None
+        
+        # Проверяем не использовал ли уже этот пользователь
+        if str(user_id) in promo['used_by']:
+            return None
+        
+        # Используем промокод
+        promo['used_count'] += 1
+        promo['used_by'].append(str(user_id))
+        self._save()
+        return promo['amount']
+
+    def get_promo_info(self, code: str) -> Optional[Dict]:
+        """Получить информацию о промокоде"""
+        code = code.upper()
+        promo = self.data['promo_codes'].get(code)
+        if promo:
+            return {
+                'code': code,
+                'amount': promo['amount'],
+                'max_uses': promo['max_uses'],
+                'used_count': promo['used_count'],
+                'remaining': promo['max_uses'] - promo['used_count']
+            }
         return None
+
+    def _is_promo_exists(self, code: str) -> bool:
+        """Проверить существует ли промокод"""
+        code = code.upper()
+        return code in self.data['promo_codes']
     
     def save_game_state(self, user_id: int, game_type: str, state_data: Dict):
         user_id_str = str(user_id)
@@ -143,29 +176,30 @@ class Storage:
         self.data['treasury'] = self.data.get('treasury', 0) + amount
         self._save()
 
-    def ban_user(self,user_id:int)->bool:
-        user_id_str=str(user_id)
+    def ban_user(self, user_id: int) -> bool:
+        user_id_str = str(user_id)
         if user_id_str in self.data['users']:
-            self.data['users'][user_id_str]['banned']=True
+            self.data['users'][user_id_str]['banned'] = True
             self._save()
             return True
         return False
 
-    def unban_user(self,user_id:int)->bool:
-        user_id_str=str(user_id)
+    def unban_user(self, user_id: int) -> bool:
+        user_id_str = str(user_id)
         if user_id_str in self.data['users']:
-            self.data['users'][user_id_str]['banned']=False
+            self.data['users'][user_id_str]['banned'] = False
             self._save()
             return True
         return False
 
-    def is_banned(self,user_id:int)->bool:
-        user=self.get_user(user_id)
-        return user.get('banned',False) if user else False
+    def is_banned(self, user_id: int) -> bool:
+        user = self.get_user(user_id)
+        return user.get('banned', False) if user else False
 
-    def get_banned_users(self)->List[Dict]:
-        return [user for user in self.data['users'].values() if user.get('banned',False)]
-    def _is_promo_exists(self, code: str) -> bool:
-        """Проверить существует ли промокод"""
-        code = code.upper()
-        return code in self.data['promo_codes']
+    def get_banned_users(self) -> List[Dict]:
+        return [user for user in self.data['users'].values() if user.get('banned', False)]
+
+    @staticmethod
+    def format_balance(amount: int) -> str:
+        """Форматирует число с разделителями (точками)"""
+        return f"{amount:,}".replace(',', '.')
